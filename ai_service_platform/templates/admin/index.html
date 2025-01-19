@@ -1,0 +1,72 @@
+{% extends "admin/base.html" %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row">
+        <div class="col-md-12 mb-4">
+            <h2>管理控制台</h2>
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h4>文档管理</h4>
+                </div>
+                <div class="card-body">
+                    <p>管理知识库文档，支持 PDF 格式</p>
+                    <a href="{{ url_for('admin.upload_document') }}" class="btn btn-primary">上传文档</a>
+                    <a href="{{ url_for('admin.list_documents') }}" class="btn btn-secondary">查看文档</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h4>音频管理</h4>
+                </div>
+                <div class="card-body">
+                    <p>管理音频文件，支持 MP3、WAV、M4A 格式</p>
+                    <a href="{{ url_for('admin.upload_audio') }}" class="btn btn-primary">上传音频</a>
+                    <a href="{{ url_for('admin.list_audio') }}" class="btn btn-secondary">查看音频</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h4>系统状态</h4>
+                </div>
+                <div class="card-body">
+                    <p>查看系统运行状态和性能指标</p>
+                    <a href="{{ url_for('admin.system_status') }}" class="btn btn-info">查看状态</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h4>智能助手</h4>
+                </div>
+                <div class="card-body">
+                    <p>配置和管理智能助手</p>
+                    <a href="{{ url_for('admin.agent') }}" class="btn btn-info">管理助手</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

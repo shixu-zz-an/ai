@@ -1,0 +1,179 @@
+{% extends "admin/layout.html" %}
+
+{% block title %}Agent 配置 - AI 服务平台{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2>Agent 配置</h2>
+    </div>
+    <form id="agent-config-form">
+        <div class="form-group">
+            <label for="agent-name">Agent 名称：</label>
+            <input type="text" id="agent-name" name="name" class="form-control" required>
+        </div>
+        <div class="form-group">
+            <label for="agent-description">描述：</label>
+            <textarea id="agent-description" name="description" class="form-control" rows="3" required></textarea>
+        </div>
+        <div class="form-group">
+            <label for="agent-prompt">系统提示词：</label>
+            <textarea id="agent-prompt" name="prompt" class="form-control" rows="5" required></textarea>
+        </div>
+        <div class="form-group">
+            <label for="agent-functions">可用函数：</label>
+            <div id="agent-functions" class="function-list">
+                <!-- 函数列表将通过 JavaScript 动态加载 -->
+            </div>
+        </div>
+        <button type="submit" class="btn btn-primary">保存配置</button>
+    </form>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2>Agent 列表</h2>
+    </div>
+    <div id="agents-list">
+        <!-- Agent 列表将通过 JavaScript 动态加载 -->
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const agentForm = document.getElementById('agent-config-form');
+    const functionsList = document.getElementById('agent-functions');
+    const agentsList = document.getElementById('agents-list');
+
+    // 加载可用函数列表
+    async function loadFunctions() {
+        try {
+            const response = await fetch('/admin/functions');
+            const functions = await response.json();
+            
+            functionsList.innerHTML = functions.map(func => `
+                <div class="function-item">
+                    <input type="checkbox" id="func-${func.id}" name="functions" value="${func.id}">
+                    <label for="func-${func.id}">
+                        <strong>${func.name}</strong>
+                        <p>${func.description}</p>
+                    </label>
+                </div>
+            `).join('');
+        } catch (error) {
+            console.error('Error:', error);
+            functionsList.innerHTML = '<p>加载函数列表失败</p>';
+        }
+    }
+
+    // 加载 Agent 列表
+    async function loadAgents() {
+        try {
+            const response = await fetch('/admin/agents');
+            const agents = await response.json();
+            
+            agentsList.innerHTML = agents.length ?
+                agents.map(agent => `
+                    <div class="agent-item">
+                        <h3>${agent.name}</h3>
+                        <p>${agent.description}</p>
+                        <div class="agent-actions">
+                            <button class="btn btn-secondary" onclick="editAgent('${agent.id}')">编辑</button>
+                            <button class="btn btn-danger" onclick="deleteAgent('${agent.id}')">删除</button>
+                        </div>
+                    </div>
+                `).join('') :
+                '<p>暂无 Agent</p>';
+        } catch (error) {
+            console.error('Error:', error);
+            agentsList.innerHTML = '<p>加载 Agent 列表失败</p>';
+        }
+    }
+
+    // 保存 Agent 配置
+    agentForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        const selectedFunctions = Array.from(formData.getAll('functions'));
+        
+        const agentData = {
+            name: formData.get('name'),
+            description: formData.get('description'),
+            prompt: formData.get('prompt'),
+            functions: selectedFunctions
+        };
+        
+        try {
+            const response = await fetch('/admin/agents', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(agentData)
+            });
+            
+            if (response.ok) {
+                alert('Agent 配置已保存');
+                this.reset();
+                loadAgents(); // 重新加载 Agent 列表
+            } else {
+                const error = await response.json();
+                alert(`保存失败: ${error.error}`);
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('保存配置时发生错误');
+        }
+    });
+
+    // 编辑 Agent
+    window.editAgent = async function(agentId) {
+        try {
+            const response = await fetch(`/admin/agents/${agentId}`);
+            const agent = await response.json();
+            
+            document.getElementById('agent-name').value = agent.name;
+            document.getElementById('agent-description').value = agent.description;
+            document.getElementById('agent-prompt').value = agent.prompt;
+            
+            // 选中相应的函数
+            agent.functions.forEach(funcId => {
+                const checkbox = document.getElementById(`func-${funcId}`);
+                if (checkbox) checkbox.checked = true;
+            });
+        } catch (error) {
+            console.error('Error:', error);
+            alert('加载 Agent 配置失败');
+        }
+    };
+
+    // 删除 Agent
+    window.deleteAgent = async function(agentId) {
+        if (!confirm('确定要删除这个 Agent 吗？')) return;
+        
+        try {
+            const response = await fetch(`/admin/agents/${agentId}`, {
+                method: 'DELETE'
+            });
+            
+            if (response.ok) {
+                loadAgents(); // 重新加载 Agent 列表
+            } else {
+                const error = await response.json();
+                alert(`删除失败: ${error.error}`);
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('删除 Agent 时发生错误');
+        }
+    };
+
+    // 初始化页面
+    loadFunctions();
+    loadAgents();
+});
+</script>
+{% endblock %}

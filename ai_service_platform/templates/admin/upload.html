@@ -1,0 +1,55 @@
+{% extends "admin/layout.html" %}
+
+{% block title %}文件上传 - 管理后台{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>文件上传</h2>
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+    
+    <div class="card">
+        <div class="card-body">
+            <form action="{{ url_for('admin.admin_upload') }}" method="post" enctype="multipart/form-data">
+                <div class="mb-3">
+                    <label for="file" class="form-label">选择文件</label>
+                    <input type="file" class="form-control" id="file" name="file" accept=".pdf,.mp3,.wav,.m4a">
+                    <div class="form-text">支持的文件类型：PDF文档、音频文件（MP3、WAV、M4A）</div>
+                </div>
+                <button type="submit" class="btn btn-primary">上传</button>
+                <a href="{{ url_for('admin.index') }}" class="btn btn-secondary">返回</a>
+            </form>
+        </div>
+    </div>
+    
+    <div class="mt-4">
+        <h3>上传说明</h3>
+        <ul class="list-group">
+            <li class="list-group-item">
+                <h5>PDF文档</h5>
+                <p>上传PDF文档后，系统会自动：</p>
+                <ul>
+                    <li>提取文档内容</li>
+                    <li>分割成适当的文本块</li>
+                    <li>生成向量并存入向量数据库</li>
+                </ul>
+            </li>
+            <li class="list-group-item">
+                <h5>音频文件</h5>
+                <p>上传音频文件后，系统会自动：</p>
+                <ul>
+                    <li>转录音频内容</li>
+                    <li>生成文本摘要</li>
+                    <li>存储处理结果</li>
+                </ul>
+            </li>
+        </ul>
+    </div>
+</div>
+{% endblock %}

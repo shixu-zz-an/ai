@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}AI 服务平台{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-container container">
+            <a href="{{ url_for('front.index') }}" class="navbar-brand">AI 服务平台</a>
+            <div class="navbar-nav">
+                <a href="{{ url_for('front.index') }}" class="nav-link">文档检索</a>
+                <a href="{{ url_for('front.chat') }}" class="nav-link">智能对话</a>
+                <a href="{{ url_for('front.speech') }}" class="nav-link">语音服务</a>
+                <a href="{{ url_for('admin.index') }}" class="nav-link">管理后台</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+
+    <script src="{{ url_for('static', filename='js/common.js') }}"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

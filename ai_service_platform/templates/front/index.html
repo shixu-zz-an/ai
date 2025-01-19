@@ -1,0 +1,288 @@
+{% extends "front/layout.html" %}
+
+{% block title %}文档检索 - AI 服务平台{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2>文档检索</h2>
+    </div>
+    <div class="form-group">
+        <label for="query">请输入您的问题：</label>
+        <textarea id="query" class="form-control" rows="3" placeholder="请输入您的问题..."></textarea>
+    </div>
+    <button id="submit-query" class="btn btn-primary">提交问题</button>
+</div>
+
+<div class="card">
+    <div id="answer-container" style="display: none;">
+        <h3>回答：</h3>
+        <div id="answer" class="answer-content"></div>
+        <div id="sources" class="sources-content" style="margin-top: 20px;">
+            <h4>参考来源：</h4>
+            <ul id="sources-list"></ul>
+        </div>
+        <div id="contexts" class="contexts-content" style="margin-top: 20px;">
+            <h4>相关内容片段：</h4>
+            <div class="contexts-container"></div>
+        </div>
+    </div>
+    <div id="loading" class="loading" style="display: none;">
+        正在思考中...
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const queryInput = document.getElementById('query');
+    const submitButton = document.getElementById('submit-query');
+    const answerContainer = document.getElementById('answer-container');
+    const answerElement = document.getElementById('answer');
+    const sourcesList = document.getElementById('sources-list');
+    const loading = document.getElementById('loading');
+    const contextsContainer = document.querySelector('.contexts-container');
+    
+    let isProcessing = false;
+
+    function setInputState(disabled) {
+        queryInput.disabled = disabled;
+        submitButton.disabled = disabled;
+    }
+
+    async function submitQuery() {
+        const query = queryInput.value.trim();
+        if (!query || isProcessing) return;
+
+        try {
+            isProcessing = true;
+            setInputState(true);
+
+            // 重置界面状态
+            answerElement.innerHTML = '';
+            sourcesList.innerHTML = '';
+            contextsContainer.innerHTML = '';
+            loading.style.display = 'block';
+            answerContainer.style.display = 'block';
+
+            // 发送GET请求
+            const response = await fetch(`/query?query=${encodeURIComponent(query)}`, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'text/event-stream'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            // 隐藏加载提示
+            loading.style.display = 'none';
+
+            let answer = '';
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            try {
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value);
+                    const lines = buffer.split('\n');
+                    
+                    // 保留最后一个不完整的行
+                    buffer = lines.pop() || '';
+
+                    for (const line of lines) {
+                        if (!line.startsWith('data: ')) continue;
+                        
+                        const data = line.slice(6);
+                        console.log('收到原始数据:', data);
+                        
+                        if (data.trim() === '[DONE]') {
+                            console.log('接收完成');
+                            continue;
+                        }
+
+                        try {
+                            const parsed = JSON.parse(data);
+                            console.log('解析后的数据:', parsed);
+
+                            // 处理错误
+                            if (parsed.error) {
+                                console.error('收到错误:', parsed.error);
+                                answerElement.innerHTML = `<div class="alert alert-danger">${parsed.error}</div>`;
+                                continue;
+                            }
+
+                            // 处理来源信息
+                            if (parsed.sources && parsed.sources.length > 0) {
+                                console.log('处理来源信息:', parsed.sources);
+                                updateSourcesList(parsed.sources);
+                            }
+
+                            // 处理上下文信息
+                            if (parsed.contexts && parsed.contexts.length > 0) {
+                                console.log('处理上下文信息:', parsed.contexts);
+                                updateContexts(parsed.contexts);
+                            }
+
+                            // 处理回答内容
+                            if (parsed.answer) {
+                                console.log('处理回答块:', parsed.answer);
+                                answer += parsed.answer;
+                                answerElement.innerHTML = answer;
+                                // 滚动到底部
+                                answerElement.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                            }
+                        } catch (e) {
+                            console.error('解析SSE数据失败:', e, data);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('读取响应流失败:', error);
+                answerElement.innerHTML = `<div class="alert alert-danger">读取响应失败: ${error.message}</div>`;
+            }
+        } catch (error) {
+            console.error('发送请求失败:', error);
+            loading.style.display = 'none';
+            answerElement.innerHTML = `<div class="alert alert-danger">发送请求失败: ${error.message}</div>`;
+        } finally {
+            isProcessing = false;
+            setInputState(false);
+        }
+    }
+
+    // 提交按钮点击事件
+    submitButton.addEventListener('click', submitQuery);
+
+    // 按Enter键提交
+    queryInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            submitQuery();
+        }
+    });
+
+    // 更新来源列表
+    function updateSourcesList(sources) {
+        if (!Array.isArray(sources)) return;
+        
+        sourcesList.innerHTML = '';
+        sources.forEach(source => {
+            if (source && typeof source.source === 'string' && source.similarity) {
+                const li = document.createElement('li');
+                const similarity = parseFloat(source.similarity);
+                li.textContent = `${source.source} (相关度: ${similarity.toFixed(4)})`;
+                sourcesList.appendChild(li);
+            }
+        });
+    }
+
+    // 更新上下文信息
+    function updateContexts(contexts) {
+        if (!Array.isArray(contexts)) return;
+        
+        contextsContainer.innerHTML = '';
+        contexts.forEach(ctx => {
+            if (validateContext(ctx)) {
+                const similarity = parseFloat(ctx.similarity);
+                const contextDiv = document.createElement('div');
+                contextDiv.className = 'context-item';
+                contextDiv.innerHTML = `
+                    <div class="context-header">
+                        <strong>${ctx.source}</strong> (第 ${ctx.page}/${ctx.total_pages} 页)
+                        <span class="similarity">相关度: ${similarity.toFixed(4)}</span>
+                    </div>
+                    <pre class="context-content">${ctx.content}</pre>
+                `;
+                contextsContainer.appendChild(contextDiv);
+            }
+        });
+    }
+
+    // 验证上下文数据
+    function validateContext(ctx) {
+        return ctx &&
+               typeof ctx.source === 'string' &&
+               typeof ctx.page === 'number' &&
+               typeof ctx.total_pages === 'number' &&
+               typeof ctx.content === 'string' &&
+               ctx.similarity;  // 可以是字符串或数字
+    }
+});
+</script>
+
+<style>
+.card {
+    margin-bottom: 20px;
+    padding: 20px;
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+.loading {
+    text-align: center;
+    padding: 20px;
+    font-style: italic;
+    color: #666;
+}
+
+.answer-content {
+    padding: 15px;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+    margin-bottom: 15px;
+}
+
+.sources-content {
+    padding: 15px;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+}
+
+.context-item {
+    margin-bottom: 15px;
+    padding: 10px;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    background-color: #fff;
+}
+
+.context-header {
+    margin-bottom: 5px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid #eee;
+}
+
+.context-content {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-size: 0.9em;
+    margin: 0;
+    padding: 10px;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+}
+
+.similarity {
+    float: right;
+    color: #6c757d;
+    font-size: 0.9em;
+}
+
+.contexts-container {
+    margin: 15px 0;
+    padding: 15px;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+}
+</style>
+{% endblock %}

@@ -1,0 +1,76 @@
+{% extends "admin/base.html" %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h3>音频文件列表</h3>
+                </div>
+                <div class="card-body">
+                    {% if audio_files %}
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>文件名</th>
+                                    <th>大小</th>
+                                    <th>修改时间</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for file in audio_files %}
+                                <tr>
+                                    <td>{{ file.name }}</td>
+                                    <td>{{ (file.size / 1024)|round(1) }} KB</td>
+                                    <td>{{ file.modified.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                                    <td>
+                                        <button class="btn btn-sm btn-primary" onclick="playAudio('{{ file.name }}')">
+                                            <i class="fas fa-play"></i> 播放
+                                        </button>
+                                        <button class="btn btn-sm btn-danger" onclick="deleteAudio('{{ file.name }}')">
+                                            <i class="fas fa-trash"></i> 删除
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info">
+                        暂无音频文件。<a href="{{ url_for('admin.upload_audio') }}" class="alert-link">上传一个音频文件</a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% block extra_js %}
+<script>
+function playAudio(filename) {
+    const audioUrl = `/uploads/audio/${filename}`;
+    const audio = new Audio(audioUrl);
+    audio.play().catch(error => {
+        console.error('播放失败:', error);
+        alert('音频播放失败，请检查文件是否正确');
+    });
+}
+
+function deleteAudio(filename) {
+    if (confirm('确定要删除这个音频文件吗？')) {
+        // 创建一个表单来发送 POST 请求
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = `{{ url_for('admin.delete_audio', filename='') }}${filename}`;
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+</script>
+{% endblock %}
+{% endblock %}

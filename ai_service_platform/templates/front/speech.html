@@ -1,0 +1,250 @@
+{% extends "front/layout.html" %}
+
+{% block title %}语音处理 - AI 服务平台{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2>音频转写与总结</h2>
+    </div>
+    <form id="upload-form" enctype="multipart/form-data">
+        <div class="form-group">
+            <label for="audio">选择音频文件（支持 WAV、MP3）：</label>
+            <input type="file" id="audio" name="audio" accept=".wav,.mp3" class="form-control">
+        </div>
+        <button type="submit" class="btn btn-primary">上传并处理</button>
+    </form>
+    <div id="processing-status" class="mt-3" style="display: none;">
+        <div class="loading">处理中...</div>
+    </div>
+    <div id="result-container" class="mt-3" style="display: none;">
+        <div class="result-section">
+            <h3>转写结果：</h3>
+            <div id="transcription" class="result-content"></div>
+        </div>
+        <div class="result-section mt-3">
+            <h3>内容总结：</h3>
+            <div id="summary" class="result-content"></div>
+        </div>
+    </div>
+</div>
+
+<div class="card mt-4">
+    <div class="card-header">
+        <h2>实时语音对话</h2>
+    </div>
+    <div class="form-group">
+        <label for="script">初始话术：</label>
+        <textarea id="script" class="form-control" rows="3" placeholder="请输入初始话术..."></textarea>
+    </div>
+    <div class="audio-controls">
+        <button id="start-recording" class="btn btn-primary">开始录音</button>
+        <button id="stop-recording" class="btn btn-danger" style="display: none;">停止录音</button>
+    </div>
+    
+    <div id="recording-status" class="mt-3" style="display: none;">
+        <div class="recording-indicator"></div>
+        <span>正在录音...</span>
+    </div>
+    
+    <div id="conversation-container" class="chat-messages mt-3">
+        <!-- 对话内容将在这里动态显示 -->
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.result-section {
+    background-color: #f8f9fa;
+    padding: 15px;
+    border-radius: 4px;
+}
+
+.result-content {
+    white-space: pre-wrap;
+    font-family: monospace;
+}
+
+.conversation-message {
+    margin-bottom: 10px;
+    padding: 8px;
+    border-radius: 4px;
+}
+
+.message-ai {
+    background-color: #e3f2fd;
+    margin-right: 20%;
+}
+
+.message-user {
+    background-color: #f5f5f5;
+    margin-left: 20%;
+}
+
+.recording-indicator {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    background-color: red;
+    border-radius: 50%;
+    margin-right: 5px;
+    animation: blink 1s infinite;
+}
+
+.audio-controls {
+    margin: 1rem 0;
+}
+
+@keyframes blink {
+    0% { opacity: 1; }
+    50% { opacity: 0.4; }
+    100% { opacity: 1; }
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const uploadForm = document.getElementById('upload-form');
+    const processingStatus = document.getElementById('processing-status');
+    const resultContainer = document.getElementById('result-container');
+    const transcriptionDiv = document.getElementById('transcription');
+    const summaryDiv = document.getElementById('summary');
+    
+    const startRecordingButton = document.getElementById('start-recording');
+    const stopRecordingButton = document.getElementById('stop-recording');
+    const recordingStatus = document.getElementById('recording-status');
+    const conversationContainer = document.getElementById('conversation-container');
+    
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let ws = null;
+
+    // 处理音频文件上传
+    uploadForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        const audioFile = formData.get('audio');
+        
+        if (!audioFile) {
+            alert('请选择音频文件');
+            return;
+        }
+        
+        processingStatus.style.display = 'block';
+        resultContainer.style.display = 'none';
+        
+        try {
+            const response = await fetch('/speech/process', {
+                method: 'POST',
+                body: formData
+            });
+            
+            const result = await response.json();
+            
+            if (response.ok) {
+                transcriptionDiv.textContent = result.transcription;
+                summaryDiv.textContent = result.summary;
+                resultContainer.style.display = 'block';
+            } else {
+                alert(`处理失败: ${result.error}`);
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('处理音频时发生错误');
+        } finally {
+            processingStatus.style.display = 'none';
+        }
+    });
+
+    // 处理实时语音对话
+    function appendMessage(content, isAI = true) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `conversation-message message-${isAI ? 'ai' : 'user'}`;
+        messageDiv.textContent = content;
+        conversationContainer.appendChild(messageDiv);
+        conversationContainer.scrollTop = conversationContainer.scrollHeight;
+    }
+
+    async function initializeWebSocket() {
+        const script = document.getElementById('script').value.trim();
+        if (!script) {
+            alert('请输入初始话术');
+            return false;
+        }
+
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${wsProtocol}//${window.location.host}/ws/speech?script=${encodeURIComponent(script)}`;
+        
+        ws = new WebSocket(wsUrl);
+        
+        ws.onmessage = function(event) {
+            const message = JSON.parse(event.data);
+            if (message.type === 'ai_response') {
+                appendMessage(message.content, true);
+            } else if (message.type === 'transcription') {
+                appendMessage(message.content, false);
+            }
+        };
+        
+        ws.onerror = function(error) {
+            console.error('WebSocket error:', error);
+            alert('连接失败，请重试');
+            stopRecording();
+        };
+        
+        return new Promise((resolve) => {
+            ws.onopen = () => resolve(true);
+        });
+    }
+
+    async function startRecording() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
+            audioChunks = [];
+
+            mediaRecorder.ondataavailable = function(event) {
+                audioChunks.push(event.data);
+                // 发送音频数据到服务器
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(event.data);
+                }
+            };
+
+            mediaRecorder.start(1000); // 每秒发送一次数据
+            startRecordingButton.style.display = 'none';
+            stopRecordingButton.style.display = 'inline-block';
+            recordingStatus.style.display = 'block';
+        } catch (error) {
+            console.error('Error:', error);
+            alert('无法访问麦克风');
+        }
+    }
+
+    function stopRecording() {
+        if (mediaRecorder) {
+            mediaRecorder.stop();
+            mediaRecorder.stream.getTracks().forEach(track => track.stop());
+        }
+        if (ws) {
+            ws.close();
+        }
+        startRecordingButton.style.display = 'inline-block';
+        stopRecordingButton.style.display = 'none';
+        recordingStatus.style.display = 'none';
+    }
+
+    startRecordingButton.addEventListener('click', async function() {
+        if (await initializeWebSocket()) {
+            startRecording();
+        }
+    });
+
+    stopRecordingButton.addEventListener('click', stopRecording);
+});
+</script>
+{% endblock %}
